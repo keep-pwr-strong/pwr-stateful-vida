@@ -1,0 +1,6 @@
+*/venv
+*/.cursor
+*/merkleTree
+
+.env
+.DS_Store
