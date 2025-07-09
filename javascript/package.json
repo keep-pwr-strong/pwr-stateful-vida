@@ -1,0 +1,20 @@
+{
+  "name": "javascript",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "type": "module",
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@pwrjs/core": "^0.13.1-alpha0",
+    "crypto": "^1.0.1",
+    "express": "^5.1.0",
+    "js-sha3": "^0.9.3",
+    "rocksdb": "^5.2.1"
+  }
+}
