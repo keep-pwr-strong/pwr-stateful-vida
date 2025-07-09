@@ -19,6 +19,7 @@ use crate::api::GET;
 
 /// Main application struct that orchestrates the entire system.
 /// Rust equivalent of the Python Main class.
+#[allow(dead_code)]
 pub struct Main {
     vida_id: u64,
     start_block: u64,

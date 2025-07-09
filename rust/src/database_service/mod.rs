@@ -22,6 +22,7 @@ static TREE: OnceLock<Arc<MerkleTree>> = OnceLock::new();
 const LAST_CHECKED_BLOCK_KEY: &[u8] = b"lastCheckedBlock";
 const BLOCK_ROOT_PREFIX: &str = "blockRootHash_";
 
+#[allow(dead_code)]
 impl DatabaseService {
     /// Initialize the DatabaseService. Must be called once before using any other methods.
     /// This is equivalent to the static block in Java.
@@ -236,6 +237,7 @@ impl DatabaseService {
     }
 }
 
+#[allow(dead_code)]
 // Convenience functions for common operations
 impl DatabaseService {
     /// Check if an address has any balance

@@ -1,7 +1,8 @@
-*/venv
-*/.cursor
-*/merkleTree
-/.vscode
+venv
+.cursor
+merkleTree
+.vscode
+node_modules
 
 .env
 .DS_Store
