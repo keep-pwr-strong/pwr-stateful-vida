@@ -3,6 +3,7 @@ venv
 merkleTree
 .vscode
 node_modules
+__pycache__
 
 .env
 .DS_Store
