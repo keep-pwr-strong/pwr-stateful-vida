@@ -68,6 +68,7 @@ public final class Main {
             DatabaseService.setBalance(Hex.decode("c767ea1d613eefe0ce1610b18cb047881bafb829"), BigInteger.valueOf(1_0000_000_000_000L));
             DatabaseService.setBalance(Hex.decode("3b4412f57828d1ceb0dbf0d460f7eb1f21fed8b4"), BigInteger.valueOf(1_0000_000_000_000L));
             DatabaseService.setBalance(Hex.decode("9282d39ca205806473f4fde5bac48ca6dfb9d300"), BigInteger.valueOf(1_0000_000_000_000L));
+            DatabaseService.setBalance(Hex.decode("e68191b7913e72e6f1759531fbfaa089ff02308a"), BigInteger.valueOf(1_0000_000_000_000L));
         }
     }
 
@@ -81,9 +82,7 @@ public final class Main {
             LOGGER.info("Using peers from args: " + peersToCheckRootHashWith);
         } else {
             peersToCheckRootHashWith = List.of(
-                    "peer1.example.com",
-                    "peer2.example.com",
-                    "peer3.example.com"
+                    "localhost:8080"
             );
             LOGGER.info("Using default peers: " + peersToCheckRootHashWith);
         }
