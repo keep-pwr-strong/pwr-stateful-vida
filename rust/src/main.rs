@@ -26,40 +26,6 @@ const PORT: u16 = 8080;
 static mut PEERS_TO_CHECK_ROOT_HASH_WITH: Vec<String> = Vec::new();
 static mut PWR_CLIENT: Option<Arc<RPC>> = None;
 
-/// Application entry point for synchronizing VIDA transactions
-/// with the local Merkle-backed database.
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Starting PWR VIDA Transaction Synchronizer...");
-
-    // Initialize peers from command line arguments
-    initialize_peers();
-
-    // Initialize database service
-    DatabaseService::initialize().map_err(|e| format!("Database initialization failed: {:?}", e))?;
-
-    // Start API server
-    start_api_server().await;
-
-    // Initialize database with initial balances if needed
-    init_initial_balances().await?;
-
-    // Get starting block number
-    let last_block = DatabaseService::get_last_checked_block().map_err(|e| format!("Failed to get last checked block: {:?}", e))?;
-    let from_block = if last_block > 0 { last_block } else { START_BLOCK };
-
-    println!("Starting synchronization from block {}", from_block);
-
-    // Subscribe to VIDA transactions
-    subscribe_and_sync(from_block).await?;
-
-    // Keep the main thread alive
-    println!("Application started successfully. Press Ctrl+C to exit.");
-    tokio::signal::ctrl_c().await?;
-
-    Ok(())
-}
-
 /// Start the API server in a background task
 async fn start_api_server() {
     let routes = GET::run();
@@ -354,4 +320,40 @@ async fn fetch_peer_root_hash(
             (false, None)
         }
     }
+}
+
+async fn shutdown() -> Result<(), Box<dyn std::error::Error>> {
+    // Flush any pending database changes
+    DatabaseService::flush().map_err(|e| format!("Failed to flush database: {:?}", e))?;
+    println!("Flushed database changes");
+    Ok(())
+}
+
+/// Application entry point for synchronizing VIDA transactions
+/// with the local Merkle-backed database.
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("Starting PWR VIDA Transaction Synchronizer...");
+
+    initialize_peers();
+    DatabaseService::initialize().map_err(|e| format!("Database initialization failed: {:?}", e))?;
+
+    start_api_server().await;
+    init_initial_balances().await?;
+
+    let last_block = DatabaseService::get_last_checked_block().map_err(|e| format!("Failed to get last checked block: {:?}", e))?;
+    let from_block = if last_block > 0 { last_block } else { START_BLOCK };
+
+    println!("Starting synchronization from block {}", from_block);
+
+    subscribe_and_sync(from_block).await?;
+
+    // Keep the main thread alive
+    println!("Application started successfully. Press Ctrl+C to exit.");
+    tokio::signal::ctrl_c().await?;
+
+    // Graceful shutdown
+    shutdown().await?;
+
+    Ok(())
 }
