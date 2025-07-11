@@ -1,11 +1,3 @@
-"""
-GET API: Python conversion of Java GET.java
-
-Flask-based REST API endpoint handlers.
-Currently provides the /rootHash endpoint for retrieving Merkle root hashes
-for specific block numbers.
-"""
-
 from flask import Flask, request
 import sys
 import os

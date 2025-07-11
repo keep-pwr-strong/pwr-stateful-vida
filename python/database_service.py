@@ -1,11 +1,3 @@
-"""
-DatabaseService: Python conversion of Java DatabaseService
-
-Singleton service for interacting with the underlying MerkleTree.
-Provides methods for managing account balances, transfers, block tracking, and
-Merkle root hash operations.
-"""
-
 import atexit
 import struct
 import threading

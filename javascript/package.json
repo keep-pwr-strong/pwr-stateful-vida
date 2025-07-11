@@ -12,9 +12,6 @@
   "description": "",
   "dependencies": {
     "@pwrjs/core": "0.13.1",
-    "crypto": "^1.0.1",
-    "express": "^5.1.0",
-    "js-sha3": "^0.9.3",
-    "rocksdb": "^5.2.1"
+    "express": "^5.1.0"
   }
 }

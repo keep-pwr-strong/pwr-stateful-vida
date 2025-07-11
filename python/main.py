@@ -4,7 +4,6 @@ import threading
 import time
 import requests
 from pwrpy.pwrsdk import PWRPY
-from pwrpy.models.Transaction import VidaDataTransaction
 from database_service import (
     get_root_hash, get_last_checked_block, set_last_checked_block, 
     set_balance, transfer, set_block_root_hash, revert_unsaved_changes, flush
