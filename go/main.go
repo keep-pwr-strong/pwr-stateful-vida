@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/keep-pwr-strong/pwr-stateful-vida/api"
-	"github.com/keep-pwr-strong/pwr-stateful-vida/database"
+	"pwr-stateful-vida/api"
+	"pwr-stateful-vida/dbservice"
 	"github.com/pwrlabs/pwrgo/rpc"
 )
 
@@ -51,7 +51,7 @@ func main() {
 	initInitialBalances()
 
 	// Get starting block number
-	lastBlock, _ := database.GetLastCheckedBlock()
+	lastBlock, _ := dbservice.GetLastCheckedBlock()
 	fromBlock := START_BLOCK
 	if lastBlock > 0 {
 		fromBlock = int(lastBlock)
@@ -78,7 +78,7 @@ func startAPIServer() {
 
 // initInitialBalances sets up the initial account balances when starting from a fresh database
 func initInitialBalances() {
-	lastBlock, _ := database.GetLastCheckedBlock()
+	lastBlock, _ := dbservice.GetLastCheckedBlock()
 	if lastBlock == 0 {
 		fmt.Println("Setting up initial balances for fresh database")
 
@@ -91,7 +91,7 @@ func initInitialBalances() {
 
 		for addressHex, balance := range initialBalances {
 			address, _ := hex.DecodeString(addressHex)
-			database.SetBalance(address, balance)
+			dbservice.SetBalance(address, balance)
 		}
 
 		fmt.Println("Initial balances setup completed")
@@ -149,7 +149,7 @@ func monitorBlockProgress() {
 
 // onChainProgress callback invoked as blocks are processed
 func onChainProgress(blockNumber int64) {
-	database.SetLastCheckedBlock(blockNumber)
+	dbservice.SetLastCheckedBlock(blockNumber)
 	checkRootHashValidityAndSave(blockNumber)
 	fmt.Printf("Checkpoint updated to block %d\n", blockNumber)
 }
@@ -201,7 +201,7 @@ func handleTransfer(jsonData map[string]interface{}, senderHex string) {
 	receiver := decodeHexAddress(receiverHex)
 
 	// Execute transfer
-	success, _ := database.Transfer(sender, receiver, amount)
+	success, _ := dbservice.Transfer(sender, receiver, amount)
 
 	if success {
 		fmt.Printf("Transfer succeeded: %s from %s to %s\n", amount, senderHex, receiverHex)
@@ -219,7 +219,7 @@ func decodeHexAddress(hexAddr string) []byte {
 
 // checkRootHashValidityAndSave validates the local Merkle root against peers and persists it if a quorum of peers agree
 func checkRootHashValidityAndSave(blockNumber int64) {
-	localRoot, _ := database.GetRootHash()
+	localRoot, _ := dbservice.GetRootHash()
 	if localRoot == nil {
 		fmt.Printf("No local root hash available for block %d\n", blockNumber)
 		return
@@ -242,7 +242,7 @@ func checkRootHashValidityAndSave(blockNumber int64) {
 		}
 
 		if matches >= quorum {
-			database.SetBlockRootHash(blockNumber, localRoot)
+			dbservice.SetBlockRootHash(blockNumber, localRoot)
 			fmt.Printf("Root hash validated and saved for block %d\n", blockNumber)
 			return
 		}
@@ -251,7 +251,7 @@ func checkRootHashValidityAndSave(blockNumber int64) {
 	fmt.Printf("Root hash mismatch: only %d/%d peers agreed\n", matches, len(peersToCheckRootHashWith))
 
 	// Revert changes and reset block to reprocess the data
-	database.RevertUnsavedChanges()
+	dbservice.RevertUnsavedChanges()
 }
 
 // fetchPeerRootHash fetches the root hash from a peer node for the specified block number
@@ -305,7 +305,7 @@ func waitForShutdown() {
 	}
 
 	// Flush any pending database changes
-	database.Flush()
+	dbservice.Flush()
 	fmt.Println("Flushed database changes")
 
 	fmt.Println("Application shutdown complete")

@@ -6,21 +6,21 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/keep-pwr-strong/pwr-stateful-vida/database"
+	"pwr-stateful-vida/dbservice"
 )
 
 func RegisterRoutes(router *gin.Engine) {
 	router.GET("/rootHash", func(c *gin.Context) {
 		blockNumber, _ := strconv.ParseInt(c.Query("blockNumber"), 10, 64)
-		lastCheckedBlock, _ := database.GetLastCheckedBlock()
+		lastCheckedBlock, _ := dbservice.GetLastCheckedBlock()
 
 		if blockNumber == lastCheckedBlock {
-			if rootHash, _ := database.GetRootHash(); rootHash != nil {
+			if rootHash, _ := dbservice.GetRootHash(); rootHash != nil {
 				c.String(http.StatusOK, hex.EncodeToString(rootHash))
 				return
 			}
 		} else if blockNumber < lastCheckedBlock && blockNumber > 1 {
-			if blockRootHash, _ := database.GetBlockRootHash(blockNumber); blockRootHash != nil {
+			if blockRootHash, _ := dbservice.GetBlockRootHash(blockNumber); blockRootHash != nil {
 				c.String(http.StatusOK, hex.EncodeToString(blockRootHash))
 				return
 			}

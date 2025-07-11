@@ -1,4 +1,4 @@
-package database
+package dbservice
 
 import (
 	"encoding/binary"

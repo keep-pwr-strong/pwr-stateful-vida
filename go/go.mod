@@ -1,4 +1,4 @@
-module github.com/keep-pwr-strong/pwr-stateful-vida
+module pwr-stateful-vida
 
 go 1.23.0
 
