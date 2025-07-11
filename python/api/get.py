@@ -6,7 +6,7 @@ Currently provides the /rootHash endpoint for retrieving Merkle root hashes
 for specific block numbers.
 """
 
-from flask import Flask, request, jsonify
+from flask import Flask, request
 import sys
 import os
 from typing import Optional
@@ -27,37 +27,15 @@ from database_service import (
 # Flask app instance
 app = Flask(__name__)
 
-
 def bytes_to_hex_string(data: Optional[bytes]) -> Optional[str]:
-    """
-    Convert bytes to hex string (equivalent to Java Hex.toHexString())
-    
-    Args:
-        data: Byte array to convert
-        
-    Returns:
-        Hex string representation or None if data is None
-    """
+    """Convert bytes to hex string"""
     if data is None:
         return None
     return data.hex()
 
-
 @app.route('/rootHash', methods=['GET'])
 def root_hash_endpoint():
-    """
-    GET /rootHash endpoint
-    
-    Retrieves Merkle root hash for a specific block number.
-    
-    Query Parameters:
-        blockNumber: Block number to get root hash for
-        
-    Returns:
-        200: Hex-encoded root hash
-        400: Error message for invalid block number or missing hash
-        500: Internal server error
-    """
+    """GET /rootHash endpoint"""
     try:
         # Parse blockNumber query parameter
         block_number_str = request.args.get('blockNumber')
@@ -91,54 +69,15 @@ def root_hash_endpoint():
             # Invalid block number
             return "Invalid block number", 400
             
-    except DatabaseServiceError as e:
-        # Database-related errors
-        print(f"DatabaseService error: {e}")
+    except DatabaseServiceError:
         return "Database error", 500
-        
-    except Exception as e:
-        # Any other unexpected errors
-        print(f"Unexpected error in /rootHash endpoint: {e}")
+    except Exception:
         return "", 500
 
-
 def run():
-    """
-    Initializes and registers all GET endpoint handlers with Flask.
-    Currently registers the /rootHash endpoint for retrieving Merkle root hashes
-    for specific block numbers.
-    
-    This function is equivalent to the Java GET.run() method.
-    """
+    """Initializes and registers all GET endpoint handlers with Flask"""
     # The route is already registered via the @app.route decorator
-    # This function exists for API compatibility with Java version
     pass
 
-
-def start_server(host: str = '127.0.0.1', port: int = 4567, debug: bool = True):
-    """
-    Start the Flask development server
-    
-    Args:
-        host: Host to bind to (default: 127.0.0.1)
-        port: Port to listen on (default: 4567, same as Spark default)
-        debug: Enable debug mode (default: True)
-    """
-    print(f"Starting Flask server on {host}:{port}")
-    app.run(host=host, port=port, debug=debug)
-
-
-# For testing purposes
-def main():
-    """Main function for testing the API"""
-    print("GET API Server")
-    print("Available endpoints:")
-    print("  GET /rootHash?blockNumber=<number>")
-    print()
-    
-    # Start the server
-    start_server()
-
-
 if __name__ == "__main__":
-    main()
+    app.run(debug=True)
