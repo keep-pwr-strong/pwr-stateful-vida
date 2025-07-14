@@ -11,7 +11,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@pwrjs/core": "0.13.1",
+    "@pwrjs/core": "0.13.2",
     "express": "^5.1.0"
   }
 }
