@@ -5,7 +5,7 @@ from database_service import (
     get_last_checked_block, set_balance
 )
 from api.get import app as flask_app
-from handler import subscribe_and_sync
+from handler import subscribe_and_sync, peers_to_check_root_hash_with
 
 START_BLOCK = 1
 PORT = 8080
@@ -17,20 +17,19 @@ INITIAL_BALANCES = {
     bytes.fromhex("e68191b7913e72e6f1759531fbfaa089ff02308a"): 1_000_000_000_000,
 }
 
-peers_to_check_root_hash_with = []
 flask_thread = None
 
 # Initializes peer list from arguments or defaults
 def initialize_peers():
-    global peers_to_check_root_hash_with
-    
     if len(sys.argv) > 1:
-        peers_to_check_root_hash_with = sys.argv[1:]
+        peers_to_check_root_hash_with.clear()
+        peers_to_check_root_hash_with.extend(sys.argv[1:])
         print(f"Using peers from args: {peers_to_check_root_hash_with}")
     else:
-        peers_to_check_root_hash_with = [
+        peers_to_check_root_hash_with.clear()
+        peers_to_check_root_hash_with.extend([
             "localhost:8080"
-        ]
+        ])
         print(f"Using default peers: {peers_to_check_root_hash_with}")
 
 # Sets up the initial account balances when starting from a fresh database
@@ -50,6 +49,11 @@ def start_api_server():
     def run_flask():
         try:
             print(f"Starting Flask API server on port {PORT}")
+            
+            # Disable Flask request logging
+            import logging
+            logging.getLogger('werkzeug').setLevel(logging.ERROR)
+            
             flask_app.run(host='0.0.0.0', port=PORT, debug=False, use_reloader=False)
         except Exception as e:
             print(f"Flask server error: {e}")
@@ -74,7 +78,7 @@ def main():
     
     print(f"Starting synchronization from block {from_block}")
     
-    subscribe_and_sync(from_block, peers_to_check_root_hash_with)
+    subscribe_and_sync(from_block)
 
 if __name__ == "__main__":
     main()

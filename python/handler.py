@@ -1,11 +1,9 @@
 import json
-import threading
-import time
 import requests
 from pwrpy.pwrsdk import PWRPY
 from database_service import (
     get_root_hash, get_last_checked_block, set_last_checked_block,
-    transfer, set_block_root_hash, revert_unsaved_changes
+    transfer, set_block_root_hash, revert_unsaved_changes, flush
 )
 
 VIDA_ID = 73_746_238
@@ -14,11 +12,12 @@ REQUEST_TIMEOUT = 10
 
 pwrpy_client = None
 subscription = None
+peers_to_check_root_hash_with = []
 
 # Fetches the root hash from a peer node for the specified block number
 def fetch_peer_root_hash(peer, block_number):
     url = f"http://{peer}/rootHash?blockNumber={block_number}"
-    
+        
     try:
         response = requests.get(url, timeout=REQUEST_TIMEOUT, headers={'Accept': 'text/plain'})
         
@@ -45,22 +44,22 @@ def fetch_peer_root_hash(peer, block_number):
         return False, None
 
 # Validates the local Merkle root against peers and persists it if a quorum of peers agree
-def check_root_hash_validity_and_save(block_number, peers):
+def check_root_hash_validity_and_save(block_number):
     local_root = get_root_hash()
     
     if not local_root:
         print(f"No local root hash available for block {block_number}")
         return
     
-    peers_count = len(peers)
+    peers_count = len(peers_to_check_root_hash_with)
     quorum = (peers_count * 2) // 3 + 1
     matches = 0
     
-    for peer in peers:
-        success, peer_root = fetch_peer_root_hash(peer, block_number)
+    for peer in peers_to_check_root_hash_with:
+        success, root_hash = fetch_peer_root_hash(peer, block_number)
         
-        if success and peer_root:
-            if peer_root == local_root:
+        if success and root_hash:
+            if root_hash == local_root:
                 matches += 1
         else:
             if peers_count > 0:
@@ -72,8 +71,9 @@ def check_root_hash_validity_and_save(block_number, peers):
             print(f"Root hash validated and saved for block {block_number}")
             return
     
-    print(f"Root hash mismatch: only {matches}/{len(peers)} peers agreed")
+    print(f"Root hash mismatch: only {matches}/{len(peers_to_check_root_hash_with)} peers agreed")
     revert_unsaved_changes()
+    subscription.set_latest_checked_block(get_last_checked_block())
 
 # Executes a token transfer described by the given JSON payload
 def handle_transfer(json_data, sender_hex):
@@ -104,7 +104,6 @@ def handle_transfer(json_data, sender_hex):
 # Processes a single VIDA transaction
 def process_transaction(txn):
     try:
-        print(f"TRANSACTION RECEIVED: {txn.data}")
         data_hex = txn.data
         data_bytes = bytes.fromhex(data_hex)
         
@@ -120,13 +119,14 @@ def process_transaction(txn):
         print(f"Error processing transaction: {e}")
 
 # Callback invoked as blocks are processed
-def on_chain_progress(block_number, peers):
+def on_chain_progress(block_number):
     set_last_checked_block(block_number)
-    check_root_hash_validity_and_save(block_number, peers)
+    check_root_hash_validity_and_save(block_number)
     print(f"Checkpoint updated to block {block_number}")
+    flush()
 
 # Subscribes to VIDA transactions starting from the given block
-def subscribe_and_sync(from_block, peers):
+def subscribe_and_sync(from_block):
     global pwrpy_client, subscription
     
     print(f"Starting VIDA transaction subscription from block {from_block}")
@@ -136,28 +136,8 @@ def subscribe_and_sync(from_block, peers):
     subscription = pwrpy_client.subscribe_to_vida_transactions(
         VIDA_ID,
         from_block,
-        process_transaction
+        process_transaction,
+        on_chain_progress
     )
     
     print(f"Successfully subscribed to VIDA {VIDA_ID} transactions")
-    
-    def monitor_blocks():
-        last_checked = get_last_checked_block()
-        while True:
-            try:
-                if subscription is None:
-                    break
-                
-                current_block = subscription.get_latest_checked_block()
-                
-                if current_block > last_checked:
-                    on_chain_progress(current_block, peers)
-                    last_checked = current_block
-                
-                time.sleep(5)
-            except Exception as e:
-                print(f"Error in block progress monitor: {e}")
-                time.sleep(10)
-    monitor_thread = threading.Thread(target=monitor_blocks, daemon=True)
-    monitor_thread.start()
-    print("Block progress monitor started")
