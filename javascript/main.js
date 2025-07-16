@@ -1,7 +1,7 @@
 import express from 'express';
 import { GET } from './api/get.js';
 import DatabaseService from './databaseService.js';
-import { subscribeAndSync } from './handler.js';
+import { subscribeAndSync, peersToCheckRootHashWith } from './handler.js';
 
 const START_BLOCK = 1;
 const PORT = 8080;
@@ -13,7 +13,6 @@ const INITIAL_BALANCES = new Map([
     [Buffer.from("e68191b7913e72e6f1759531fbfaa089ff02308a", 'hex'), 1000000000000n],
 ]);
 
-let peersToCheckRootHashWith = [];
 let app = null;
 
 // Initializes peer list from arguments or defaults
@@ -21,12 +20,12 @@ function initializePeers() {
     const args = process.argv.slice(2);
     
     if (args.length > 0) {
-        peersToCheckRootHashWith = args;
+        peersToCheckRootHashWith.length = 0;
+        peersToCheckRootHashWith.push(...args);
         console.log("Using peers from args:", peersToCheckRootHashWith);
     } else {
-        peersToCheckRootHashWith = [
-            "localhost:8080"
-        ];
+        peersToCheckRootHashWith.length = 0;
+        peersToCheckRootHashWith.push("localhost:8080");
         console.log("Using default peers:", peersToCheckRootHashWith);
     }
 }
@@ -93,7 +92,7 @@ async function main() {
 
     console.log(`Starting synchronization from block ${fromBlock}`);
 
-    await subscribeAndSync(fromBlock, peersToCheckRootHashWith);
+    await subscribeAndSync(fromBlock);
 
     // Keep the main thread alive
     console.log("Application started successfully. Press Ctrl+C to exit.");

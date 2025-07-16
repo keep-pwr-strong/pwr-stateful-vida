@@ -6,6 +6,7 @@ const VIDA_ID = 73746238;
 const RPC_URL = "https://pwrrpc.pwrlabs.io/";
 const REQUEST_TIMEOUT = 10000;
 
+export let peersToCheckRootHashWith = [];
 let pwrjsClient = null;
 let subscription = null;
 
@@ -50,7 +51,7 @@ async function fetchPeerRootHash(peer, blockNumber) {
 }
 
 // Validates the local Merkle root against peers and persists it if a quorum of peers agree
-async function checkRootHashValidityAndSave(blockNumber, peers) {
+async function checkRootHashValidityAndSave(blockNumber) {
     const localRoot = await DatabaseService.getRootHash();
     
     if (!localRoot) {
@@ -58,11 +59,11 @@ async function checkRootHashValidityAndSave(blockNumber, peers) {
         return;
     }
     
-    let peersCount = peers.length;
+    let peersCount = peersToCheckRootHashWith.length;
     let quorum = Math.floor((peersCount * 2) / 3) + 1;
     let matches = 0;
     
-    for (const peer of peers) {
+    for (const peer of peersToCheckRootHashWith) {
         const { success, rootHash } = await fetchPeerRootHash(peer, blockNumber);
         
         if (success && rootHash) {
@@ -83,8 +84,9 @@ async function checkRootHashValidityAndSave(blockNumber, peers) {
         }
     }
     
-    console.log(`Root hash mismatch: only ${matches}/${peers.length} peers agreed`);
+    console.log(`Root hash mismatch: only ${matches}/${peersToCheckRootHashWith.length} peers agreed`);
     await DatabaseService.revertUnsavedChanges();
+    subscription.setLatestCheckedBlock(BigInt(await DatabaseService.getLastCheckedBlock()));
 }
 
 // Executes a token transfer described by the given JSON payload
@@ -93,7 +95,7 @@ async function handleTransfer(jsonData, senderHex) {
     const receiverHex = jsonData.receiver || "";
     
     if (amount <= 0 || !receiverHex) {
-        console.log("Invalid transfer data:", jsonData);
+        console.log("Skipping invalid transfer:", jsonData);
         return;
     }
 
@@ -113,9 +115,7 @@ async function handleTransfer(jsonData, senderHex) {
 }
 
 // Processes a single VIDA transaction
-function processTransaction(txn) {
-    console.log(`TRANSACTION RECEIVED: ${txn.data}`);
-    
+function processTransaction(txn) {    
     try {
         const dataBytes = Buffer.from(txn.data, 'hex');
     
@@ -128,20 +128,26 @@ function processTransaction(txn) {
             handleTransfer(jsonData, txn.sender);
         }
     } catch (error) {
-        console.error("Error processing transaction:", error);
+        console.error("Error processing transaction:", txn.hash, error);
     }
 }
 
 // Callback invoked as blocks are processed
-async function onChainProgress(blockNumber, peers) {
-    await DatabaseService.setLastCheckedBlock(blockNumber);
-    await checkRootHashValidityAndSave(blockNumber, peers);
-    console.log(`Checkpoint updated to block ${blockNumber}`);
-    await DatabaseService.flush();
+async function onChainProgress(blockNumber) {
+    try {
+        await DatabaseService.setLastCheckedBlock(blockNumber);
+        await checkRootHashValidityAndSave(blockNumber);
+        console.log(`Checkpoint updated to block ${blockNumber}`);
+        await DatabaseService.flush();
+    } catch (error) {
+        console.error("Failed to update last checked block:", blockNumber, error);
+    } finally {
+        return null;
+    }
 }
 
 // Subscribes to VIDA transactions starting from the given block
-export async function subscribeAndSync(fromBlock, peers) {
+export async function subscribeAndSync(fromBlock) {
     console.log(`Starting VIDA transaction subscription from block ${fromBlock}`);
 
     // Initialize RPC client
@@ -151,25 +157,8 @@ export async function subscribeAndSync(fromBlock, peers) {
     subscription = pwrjsClient.subscribeToVidaTransactions(
         VIDA_ID,
         BigInt(fromBlock),
-        processTransaction
+        processTransaction,
+        onChainProgress
     );
-    
     console.log(`Successfully subscribed to VIDA ${VIDA_ID} transactions`);
-    
-    // Start monitoring loop for block progress
-    setInterval(async () => {
-        let lastChecked = await DatabaseService.getLastCheckedBlock();
-        try {
-            let currentBlock = subscription.getLatestCheckedBlock();
-
-            if (currentBlock > lastChecked) {
-                await onChainProgress(currentBlock, peers);
-                lastChecked = currentBlock;
-            }
-        } catch (error) {
-            console.error("Error in block progress monitor:", error);
-        }
-    }, 5000);
-    
-    console.log("Block progress monitor started");
 }
