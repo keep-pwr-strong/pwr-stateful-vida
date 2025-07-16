@@ -5,6 +5,7 @@ using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 using PWR;
 using PWR.Models;
@@ -27,20 +28,17 @@ public class Program
         { Convert.FromHexString("e68191b7913e72e6f1759531fbfaa089ff02308a"), new BigInteger(1000000000000) },
     };
 
-    // Global state
-    private static List<string> peersToCheckRootHashWith = new();
-
     private static void InitializePeers(string[] args)
     {
         if (args.Length > 0)
         {
-            peersToCheckRootHashWith = args.ToList();
-            Console.WriteLine($"Using peers from args: [{string.Join(", ", peersToCheckRootHashWith)}]");
+            Handler.peersToCheckRootHashWith = args.ToList();
+            Console.WriteLine($"Using peers from args: [{string.Join(", ", Handler.peersToCheckRootHashWith)}]");
         }
         else
         {
-            peersToCheckRootHashWith = new List<string> { "localhost:8080" };
-            Console.WriteLine($"Using default peers: [{string.Join(", ", peersToCheckRootHashWith)}]");
+            Handler.peersToCheckRootHashWith = new List<string> { "localhost:8080" };
+            Console.WriteLine($"Using default peers: [{string.Join(", ", Handler.peersToCheckRootHashWith)}]");
         }
     }
 
@@ -65,6 +63,10 @@ public class Program
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls($"http://0.0.0.0:{PORT}");
+        
+        // Disable ASP.NET Core request logging
+        builder.Logging.ClearProviders();
+        builder.Logging.SetMinimumLevel(LogLevel.Warning);
         
         var app = builder.Build();
         GET.Run(app);
@@ -93,7 +95,7 @@ public class Program
         
         Console.WriteLine($"Starting synchronization from block {fromBlock}");
         
-        await Handler.SubscribeAndSync(fromBlock, peersToCheckRootHashWith);
+        await Handler.SubscribeAndSync(fromBlock);
         
         // Keep the main thread alive
         Console.WriteLine("Application started successfully. Press Ctrl+C to exit.");

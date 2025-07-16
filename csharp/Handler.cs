@@ -18,9 +18,10 @@ public class Handler
     private const ulong VIDA_ID = 73746238;
     private const string RPC_URL = "https://pwrrpc.pwrlabs.io/";
 
-    // Global state
     private static RPC? pwrClient;
     private static VidaTransactionSubscription? subscription;
+    // Global state
+    public static List<string> peersToCheckRootHashWith = new();
 
     private static async Task<(bool success, byte[]? rootHash)> FetchPeerRootHash(
         HttpClient client, string peer, ulong blockNumber)
@@ -67,7 +68,7 @@ public class Handler
         }
     }
 
-    private static async Task CheckRootHashValidityAndSave(ulong blockNumber, List<string> peers)
+    private static async Task CheckRootHashValidityAndSave(ulong blockNumber)
     {
         var localRoot = DatabaseService.GetRootHash();
 
@@ -77,13 +78,13 @@ public class Handler
             return;
         }
 
-        int peersCount = peers.Count;
+        int peersCount = peersToCheckRootHashWith.Count;
         int quorum = (peersCount * 2) / 3 + 1;
         int matches = 0;
 
         using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
 
-        foreach (var peer in peers)
+        foreach (var peer in peersToCheckRootHashWith)
         {
             var (success, peerRoot) = await FetchPeerRootHash(httpClient, peer, blockNumber);
 
@@ -111,8 +112,9 @@ public class Handler
             }
         }
 
-        Console.WriteLine($"Root hash mismatch: only {matches}/{peers.Count} peers agreed");
+        Console.WriteLine($"Root hash mismatch: only {matches}/{peersToCheckRootHashWith.Count} peers agreed");
         DatabaseService.RevertUnsavedChanges();
+        subscription.SetLatestCheckedBlock(DatabaseService.GetLastCheckedBlock());
     }
 
     private static void HandleTransfer(JObject jsonData, string senderHex)
@@ -161,8 +163,6 @@ public class Handler
 
     private static void ProcessTransaction(VidaDataTransaction txn)
     {
-        Console.WriteLine($"TRANSACTION RECEIVED: {txn.Data}");
-
         try
         {
             var dataBytes = PWR.Utils.Extensions.HexStringToByteArray(txn.Data);
@@ -182,15 +182,15 @@ public class Handler
         }
     }
 
-    private static async Task OnChainProgress(ulong blockNumber, List<string> peers)
+    private static async Task OnChainProgress(ulong blockNumber)
     {
         DatabaseService.SetLastCheckedBlock(blockNumber);
-        await CheckRootHashValidityAndSave(blockNumber, peers);
+        await CheckRootHashValidityAndSave(blockNumber);
         Console.WriteLine($"Checkpoint updated to block {blockNumber}");
         DatabaseService.Flush();
     }
 
-    public static async Task SubscribeAndSync(ulong fromBlock, List<string> peers)
+    public static async Task SubscribeAndSync(ulong fromBlock)
     {
         Console.WriteLine($"Starting VIDA transaction subscription from block {fromBlock}");
 
@@ -199,29 +199,10 @@ public class Handler
         subscription = pwrClient.SubscribeToVidaTransactions(
             VIDA_ID,
             fromBlock,
-            ProcessTransaction
+            ProcessTransaction,
+            OnChainProgress
         );
         Console.WriteLine($"Successfully subscribed to VIDA {VIDA_ID} transactions");
-
-        ulong lastChecked = DatabaseService.GetLastCheckedBlock();;
-        new Timer(async _ =>
-        {
-            try
-            {
-                var currentBlock = subscription.GetLatestCheckedBlock();
-
-                if (currentBlock > lastChecked)
-                {
-                    await OnChainProgress(currentBlock, peers);
-                    lastChecked = currentBlock;
-                }
-            }
-            catch (Exception error)
-            {
-                Console.WriteLine($"Error in block progress monitor: {error.Message}");
-            }
-        }, null, TimeSpan.Zero, TimeSpan.FromSeconds(5));
-        Console.WriteLine("Block progress monitor started");
     }
 
 }

@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="PWR" Version="1.4.0" />
+    <PackageReference Include="PWR" Version="1.5.0" />
   </ItemGroup>
+
 </Project>
