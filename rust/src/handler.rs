@@ -1,14 +1,13 @@
 use pwr_rs::{
     RPC,
     transaction::types::VidaDataTransaction,
-    rpc::types::VidaTransactionSubscription,
+    rpc::types::{VidaTransactionSubscription, block_saver},
 };
 use std::sync::Arc;
 use std::time::Duration;
 use hex;
 use serde_json::{Value, Map};
 use num_bigint::BigUint;
-use tokio::time::sleep;
 
 use crate::database_service::DatabaseService;
 
@@ -17,7 +16,10 @@ const VIDA_ID: u64 = 73_746_238;
 const RPC_URL: &str = "https://pwrrpc.pwrlabs.io/";
 
 // Global state
+#[allow(non_upper_case_globals)]
 static mut subscription: Option<VidaTransactionSubscription> = None;
+
+pub static mut PEERS_TO_CHECK_ROOT_HASH_WITH: Vec<String> = Vec::new();
 
 // Fetches the root hash from a peer node for the specified block number
 async fn fetch_peer_root_hash(
@@ -71,7 +73,7 @@ async fn fetch_peer_root_hash(
 }
 
 // Validates the local Merkle root against peers and persists it if a quorum of peers agree
-async fn check_root_hash_validity_and_save(block_number: u64, peers: Vec<String>) {
+async fn check_root_hash_validity_and_save(block_number: u64) {
     let local_root = match DatabaseService::get_root_hash() {
         Ok(Some(root)) => root,
         _ => {
@@ -80,7 +82,7 @@ async fn check_root_hash_validity_and_save(block_number: u64, peers: Vec<String>
         }
     };
     
-    let peers = unsafe { &peers };
+    let peers = unsafe { &PEERS_TO_CHECK_ROOT_HASH_WITH };
     let mut peers_count = peers.len();
     let mut quorum = (peers_count * 2) / 3 + 1;
     let mut matches = 0;
@@ -116,6 +118,11 @@ async fn check_root_hash_validity_and_save(block_number: u64, peers: Vec<String>
     
     // Revert changes and reset block to reprocess the data
     DatabaseService::revert_unsaved_changes().unwrap();
+    unsafe {
+        subscription.as_ref().unwrap().set_latest_checked_block(
+            DatabaseService::get_last_checked_block().unwrap() as u64
+        );
+    }
 }
 
 // Executes a token transfer described by the given JSON payload
@@ -201,50 +208,33 @@ fn process_transaction(txn: VidaDataTransaction) {
 }
 
 // Callback invoked as blocks are processed
-async fn on_chain_progress(block_number: u64, peers: Vec<String>) {
+async fn on_chain_progress(block_number: u64) {
     DatabaseService::set_last_checked_block(block_number).unwrap();
-    check_root_hash_validity_and_save(block_number, peers).await;
+    check_root_hash_validity_and_save(block_number).await;
     println!("Checkpoint updated to block {}", block_number);
     DatabaseService::flush().map_err(|e| format!("Failed to flush database: {:?}", e)).unwrap();
 }
 
 // Subscribes to VIDA transactions starting from the given block
-pub async fn subscribe_and_sync(from_block: u64, peers: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn subscribe_and_sync(from_block: u64) -> Result<(), Box<dyn std::error::Error>> {
     println!("Starting VIDA transaction subscription from block {}", from_block);
     
     // Initialize RPC client
     let rpc = RPC::new(RPC_URL).await.map_err(|e| format!("Failed to create RPC client: {:?}", e))?;
     let rpc = Arc::new(rpc);
     
+    let block_saver = block_saver::from_async(on_chain_progress);
     // Subscribe to VIDA transactions
     unsafe {
         subscription = Some(rpc.subscribe_to_vida_transactions(
             VIDA_ID,
             from_block,
             process_transaction,
+            Some(block_saver)
         ));
     }
     
     println!("Successfully subscribed to VIDA {} transactions", VIDA_ID);
-    
-    // Start monitoring loop for block progress
-    tokio::spawn(async move {
-        let mut last_checked = DatabaseService::get_last_checked_block().unwrap_or(0);
 
-        loop {
-            // Get current latest checked block from subscription
-            let current_block = unsafe { subscription.as_ref().unwrap().get_latest_checked_block() };
-
-            // If block has progressed, trigger validation
-            if current_block > last_checked {
-                on_chain_progress(current_block, peers.clone()).await;
-                last_checked = current_block;
-            }
-
-            sleep(Duration::from_secs(5)).await;
-        }
-    });
-
-    println!("Block progress monitor started");
     Ok(())
 }

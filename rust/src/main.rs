@@ -10,14 +10,11 @@ use tokio::time::sleep;
 
 use crate::database_service::DatabaseService;
 use crate::api::GET;
-use crate::handler::subscribe_and_sync;
+use crate::handler::{subscribe_and_sync, PEERS_TO_CHECK_ROOT_HASH_WITH};
 
 // Constants
 const START_BLOCK: u64 = 1;
 const PORT: u16 = 8080;
-
-// Global state
-static mut PEERS_TO_CHECK_ROOT_HASH_WITH: Vec<String> = Vec::new();
 
 // Initializes peer list from arguments or defaults
 fn initialize_peers() {
@@ -91,8 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Starting synchronization from block {}", from_block);
 
-    let peers = unsafe { PEERS_TO_CHECK_ROOT_HASH_WITH.clone() };
-    subscribe_and_sync(from_block, peers).await?;
+    subscribe_and_sync(from_block).await?;
 
     // Keep the main thread alive
     println!("Application started successfully. Press Ctrl+C to exit.");
