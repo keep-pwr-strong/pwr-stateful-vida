@@ -1,20 +1,6 @@
 from flask import Flask, request
-import sys
-import os
 from typing import Optional
-
-# Add the src directory to the path to import DatabaseService
-src_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-if src_path not in sys.path:
-    sys.path.insert(0, src_path)
-
-# Import DatabaseService functions
-from database_service import (
-    get_root_hash,
-    get_last_checked_block, 
-    get_block_root_hash,
-    DatabaseServiceError
-)
+from database_service import DatabaseService, DatabaseServiceError
 
 # Flask app instance
 app = Flask(__name__)
@@ -40,11 +26,11 @@ def root_hash_endpoint():
             return "Invalid block number format", 400
         
         # Get last checked block for validation
-        last_checked_block = get_last_checked_block()
+        last_checked_block = DatabaseService.get_last_checked_block()
         
         if block_number == last_checked_block:
             # Return current root hash
-            root_hash = get_root_hash()
+            root_hash = DatabaseService.get_root_hash()
             if root_hash is not None:
                 return bytes_to_hex_string(root_hash)
             else:
@@ -52,7 +38,7 @@ def root_hash_endpoint():
                 
         elif block_number < last_checked_block and block_number > 1:
             # Return historical root hash
-            block_root_hash = get_block_root_hash(block_number)
+            block_root_hash = DatabaseService.get_block_root_hash(block_number)
             if block_root_hash is not None:
                 return bytes_to_hex_string(block_root_hash)
             else:

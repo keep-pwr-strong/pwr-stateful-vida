@@ -30,137 +30,6 @@ public class Handler {
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
 
     /**
-     * Subscribes to VIDA transactions starting from the given block.
-     *
-     * @param fromBlock block height to begin synchronization from
-     * @throws IOException if network communication fails
-     * @throws RocksDBException if persisting data fails
-     */
-    public static void subscribeAndSync(long fromBlock) throws IOException, RocksDBException {
-        //The subscription to VIDA transactions has a built in shutdwown hook
-        subscription =
-                PWRJ_CLIENT.subscribeToVidaTransactions(
-                        PWRJ_CLIENT,
-                        VIDA_ID,
-                        fromBlock,
-                        Handler::onChainProgress,
-                        Handler::processTransaction
-                );
-    }
-
-    /**
-     * Callback invoked as blocks are processed.
-     *
-     * @param blockNumber block height that was just processed
-     * @return always {@code null}
-     */
-    private static Void onChainProgress(long blockNumber) {
-        try {
-            DatabaseService.setLastCheckedBlock(blockNumber);
-            checkRootHashValidityAndSave(blockNumber);
-            LOGGER.info("Checkpoint updated to block " + blockNumber);
-        } catch (RocksDBException e) {
-            LOGGER.log(Level.WARNING, "Failed to update last checked block: " + blockNumber, e);
-        } finally {
-            return null;
-        }
-    }
-
-    /**
-     * Processes a single VIDA transaction.
-     *
-     * @param txn the transaction to handle
-     */
-    private static void processTransaction(FalconTransaction.PayableVidaDataTxn txn) {
-        try {
-            JSONObject json = new JSONObject(new String(txn.getData(), StandardCharsets.UTF_8));
-            String action = json.optString("action", "");
-            if ("transfer".equalsIgnoreCase(action)) {
-                handleTransfer(json, txn.getSender());
-            }
-        } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error processing transaction: " + txn.getTransactionHash(), e);
-        }
-    }
-
-    /**
-     * Executes a token transfer described by the given JSON payload.
-     *
-     * @param json       transfer description
-     * @param senderHex  hexadecimal sender address
-     * @throws RocksDBException if balance updates fail
-     */
-    private static void handleTransfer(JSONObject json, String senderHex) throws RocksDBException {
-        BigInteger amount = json.optBigInteger("amount", null);
-        String receiverHex = json.optString("receiver", null);
-        if (amount == null || receiverHex == null) {
-            LOGGER.warning("Skipping invalid transfer: " + json);
-            return;
-        }
-
-        byte[] sender = decodeHexAddress(senderHex);
-        byte[] receiver = decodeHexAddress(receiverHex);
-
-        boolean success = DatabaseService.transfer(sender, receiver, amount);
-        if (success) {
-            LOGGER.info("Transfer succeeded: " + json);
-        } else {
-            LOGGER.warning("Transfer failed (insufficient funds): " + json);
-        }
-    }
-
-    /**
-     * Decodes a hexadecimal address into raw bytes.
-     *
-     * @param hex hexadecimal string, optionally prefixed with {@code 0x}
-     * @return 20-byte address
-     */
-    private static byte[] decodeHexAddress(String hex) {
-        String clean = hex.startsWith("0x") ? hex.substring(2) : hex;
-        return Hex.decode(clean);
-    }
-
-    /**
-     * Validates the local Merkle root against peers and persists it if a quorum
-     * of peers agree.
-     *
-     * @param blockNumber block height being validated
-     */
-    private static void checkRootHashValidityAndSave(long blockNumber) {
-        try {
-            byte[] localRoot = DatabaseService.getRootHash();
-            int peersCount = Main.peersToCheckRootHashWith.size();
-            long quorum = (peersCount * 2) / 3 + 1;
-            int matches = 0;
-            for (String peer : Main.peersToCheckRootHashWith) {
-                // TODO: fetch peer root via RPC and compare
-                BiResult<Boolean /**/, byte[]> response = fetchPeerRootHash(peer, blockNumber);
-                if(response.getFirst()) {
-                    if(Arrays.equals(response.getSecond(), localRoot)) {
-                        matches++;
-                    }
-                } else {
-                    --peersCount;
-                    quorum = (peersCount * 2) / 3 + 1;
-                }
-
-                if (matches >= quorum) {
-                    DatabaseService.setBlockRootHash(blockNumber, localRoot);
-                    LOGGER.info("Root hash validated and saved for block " + blockNumber);
-                    return;
-                }
-            }
-
-            LOGGER.severe("Root hash mismatch: only " + matches + "/" + Main.peersToCheckRootHashWith.size());
-            //Revert changes and reset block to reprocess the data
-            DatabaseService.revertUnsavedChanges();
-            subscription.setLatestCheckedBlock(DatabaseService.getLastCheckedBlock());
-        } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Error verifying root hash at block " + blockNumber, e);
-        }
-    }
-
-    /**
      * Fetches the root hash from a peer node for the specified block number.
      *
      * @param peer the peer hostname/address
@@ -212,5 +81,128 @@ public class Handler {
             LOGGER.log(Level.WARNING, "Failed to fetch root hash from peer " + peer + " for block " + blockNumber, e);
             return new BiResult<>(false, new byte[0]);
         }
+    }
+
+    /**
+     * Validates the local Merkle root against peers and persists it if a quorum
+     * of peers agree.
+     *
+     * @param blockNumber block height being validated
+     */
+    private static void checkRootHashValidityAndSave(long blockNumber) {
+        try {
+            byte[] localRoot = DatabaseService.getRootHash();
+            int peersCount = Main.peersToCheckRootHashWith.size();
+            long quorum = (peersCount * 2) / 3 + 1;
+            int matches = 0;
+            for (String peer : Main.peersToCheckRootHashWith) {
+                // TODO: fetch peer root via RPC and compare
+                BiResult<Boolean /**/, byte[]> response = fetchPeerRootHash(peer, blockNumber);
+                if(response.getFirst()) {
+                    if(Arrays.equals(response.getSecond(), localRoot)) {
+                        matches++;
+                    }
+                } else {
+                    --peersCount;
+                    quorum = (peersCount * 2) / 3 + 1;
+                }
+
+                if (matches >= quorum) {
+                    DatabaseService.setBlockRootHash(blockNumber, localRoot);
+                    LOGGER.info("Root hash validated and saved for block " + blockNumber);
+                    return;
+                }
+            }
+
+            LOGGER.severe("Root hash mismatch: only " + matches + "/" + Main.peersToCheckRootHashWith.size());
+            //Revert changes and reset block to reprocess the data
+            DatabaseService.revertUnsavedChanges();
+            subscription.setLatestCheckedBlock(DatabaseService.getLastCheckedBlock());
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Error verifying root hash at block " + blockNumber, e);
+        }
+    }
+
+    /**
+     * Executes a token transfer described by the given JSON payload.
+     *
+     * @param json       transfer description
+     * @param senderHex  hexadecimal sender address
+     * @throws RocksDBException if balance updates fail
+     */
+    private static void handleTransfer(JSONObject json, String senderHex) throws RocksDBException {
+        BigInteger amount = json.optBigInteger("amount", null);
+        String receiverHex = json.optString("receiver", null);
+        if (amount == null || receiverHex == null) {
+            LOGGER.warning("Skipping invalid transfer: " + json);
+            return;
+        }
+
+        String senderAddress = senderHex.startsWith("0x") ? senderHex.substring(2) : senderHex;
+        String receiverAddress = receiverHex.startsWith("0x") ? receiverHex.substring(2) : receiverHex;
+
+        byte[] sender = Hex.decode(senderAddress);
+        byte[] receiver = Hex.decode(receiverAddress);
+
+        boolean success = DatabaseService.transfer(sender, receiver, amount);
+        if (success) {
+            LOGGER.info("Transfer succeeded: " + json);
+        } else {
+            LOGGER.warning("Transfer failed (insufficient funds): " + json);
+        }
+    }
+
+    /**
+     * Processes a single VIDA transaction.
+     *
+     * @param txn the transaction to handle
+     */
+    private static void processTransaction(FalconTransaction.PayableVidaDataTxn txn) {
+        try {
+            JSONObject json = new JSONObject(new String(txn.getData(), StandardCharsets.UTF_8));
+            String action = json.optString("action", "");
+            if ("transfer".equalsIgnoreCase(action)) {
+                handleTransfer(json, txn.getSender());
+            }
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Error processing transaction: " + txn.getTransactionHash(), e);
+        }
+    }
+
+    /**
+     * Callback invoked as blocks are processed.
+     *
+     * @param blockNumber block height that was just processed
+     * @return always {@code null}
+     */
+    private static Void onChainProgress(long blockNumber) {
+        try {
+            DatabaseService.setLastCheckedBlock(blockNumber);
+            checkRootHashValidityAndSave(blockNumber);
+            LOGGER.info("Checkpoint updated to block " + blockNumber);
+        } catch (RocksDBException e) {
+            LOGGER.log(Level.WARNING, "Failed to update last checked block: " + blockNumber, e);
+        } finally {
+            return null;
+        }
+    }
+
+    /**
+     * Subscribes to VIDA transactions starting from the given block.
+     *
+     * @param fromBlock block height to begin synchronization from
+     * @throws IOException if network communication fails
+     * @throws RocksDBException if persisting data fails
+     */
+    public static void subscribeAndSync(long fromBlock) throws IOException, RocksDBException {
+        //The subscription to VIDA transactions has a built in shutdwown hook
+        subscription =
+                PWRJ_CLIENT.subscribeToVidaTransactions(
+                        PWRJ_CLIENT,
+                        VIDA_ID,
+                        fromBlock,
+                        Handler::onChainProgress,
+                        Handler::processTransaction
+                );
     }
 }

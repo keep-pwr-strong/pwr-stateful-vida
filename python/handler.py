@@ -1,10 +1,7 @@
 import json
 import requests
 from pwrpy.pwrsdk import PWRPY
-from database_service import (
-    get_root_hash, get_last_checked_block, set_last_checked_block,
-    transfer, set_block_root_hash, revert_unsaved_changes, flush
-)
+from database_service import DatabaseService
 
 VIDA_ID = 73_746_238
 RPC_URL = "https://pwrrpc.pwrlabs.io/"
@@ -45,7 +42,7 @@ def fetch_peer_root_hash(peer, block_number):
 
 # Validates the local Merkle root against peers and persists it if a quorum of peers agree
 def check_root_hash_validity_and_save(block_number):
-    local_root = get_root_hash()
+    local_root = DatabaseService.get_root_hash()
     
     if not local_root:
         print(f"No local root hash available for block {block_number}")
@@ -67,13 +64,13 @@ def check_root_hash_validity_and_save(block_number):
                 quorum = (peers_count * 2) // 3 + 1
         
         if matches >= quorum:
-            set_block_root_hash(block_number, local_root)
+            DatabaseService.set_block_root_hash(block_number, local_root)
             print(f"Root hash validated and saved for block {block_number}")
             return
     
     print(f"Root hash mismatch: only {matches}/{len(peers_to_check_root_hash_with)} peers agreed")
-    revert_unsaved_changes()
-    subscription.set_latest_checked_block(get_last_checked_block())
+    DatabaseService.revert_unsaved_changes()
+    subscription.set_latest_checked_block(DatabaseService.get_last_checked_block())
 
 # Executes a token transfer described by the given JSON payload
 def handle_transfer(json_data, sender_hex):
@@ -91,7 +88,7 @@ def handle_transfer(json_data, sender_hex):
         sender = bytes.fromhex(sender_address)
         receiver = bytes.fromhex(receiver_address)
         
-        success = transfer(sender, receiver, amount)
+        success = DatabaseService.transfer(sender, receiver, amount)
         
         if success:
             print(f"Transfer succeeded: {amount} from {sender_hex} to {receiver_hex}")
@@ -120,10 +117,10 @@ def process_transaction(txn):
 
 # Callback invoked as blocks are processed
 def on_chain_progress(block_number):
-    set_last_checked_block(block_number)
+    DatabaseService.set_last_checked_block(block_number)
     check_root_hash_validity_and_save(block_number)
     print(f"Checkpoint updated to block {block_number}")
-    flush()
+    DatabaseService.flush()
 
 # Subscribes to VIDA transactions starting from the given block
 def subscribe_and_sync(from_block):

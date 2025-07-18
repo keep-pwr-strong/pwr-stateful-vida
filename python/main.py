@@ -1,10 +1,8 @@
 import sys
 import threading
 import time
-from database_service import (
-    get_last_checked_block, set_balance
-)
-from api.get import app as flask_app
+from database_service import DatabaseService
+from api.get import app as api_app
 from handler import subscribe_and_sync, peers_to_check_root_hash_with
 
 START_BLOCK = 1
@@ -34,11 +32,11 @@ def initialize_peers():
 
 # Sets up the initial account balances when starting from a fresh database
 def init_initial_balances():
-    if get_last_checked_block() == 0:
+    if DatabaseService.get_last_checked_block() == 0:
         print("Setting up initial balances for fresh database")
         
         for address, balance in INITIAL_BALANCES.items():
-            set_balance(address, balance)
+            DatabaseService.set_balance(address, balance)
             print(f"Set initial balance for {address.hex()}: {balance}")
         print("Initial balances setup completed")
 
@@ -54,7 +52,7 @@ def start_api_server():
             import logging
             logging.getLogger('werkzeug').setLevel(logging.ERROR)
             
-            flask_app.run(host='0.0.0.0', port=PORT, debug=False, use_reloader=False)
+            api_app.run(host='0.0.0.0', port=PORT, debug=False, use_reloader=False)
         except Exception as e:
             print(f"Flask server error: {e}")
     
@@ -73,7 +71,7 @@ def main():
     start_api_server()
     init_initial_balances()
     
-    last_block = get_last_checked_block()
+    last_block = DatabaseService.get_last_checked_block()
     from_block = last_block if last_block > 0 else START_BLOCK
     
     print(f"Starting synchronization from block {from_block}")

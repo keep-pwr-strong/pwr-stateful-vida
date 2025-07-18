@@ -23,21 +23,18 @@ public final class Main {
     public static List<String> peersToCheckRootHashWith;
 
     /**
-     * Application entry point.
-     *
-     * @param args optional list of peer hosts to query for root hash
+     * Initializes peer list from arguments or defaults.
+     * @param args command-line arguments; if present, each arg is a peer hostname
      */
-    public static void main(String[] args) {
-        try {
-            port(PORT);
-            GET.run();
-            initInitialBalances();
-            initializePeers(args);
-            long lastBlock = DatabaseService.getLastCheckedBlock();
-            long fromBlock = (lastBlock > 0) ? lastBlock : START_BLOCK;
-            Handler.subscribeAndSync(fromBlock);
-        } catch (IOException | RocksDBException e) {
-            LOGGER.log(Level.SEVERE, "Initialization failed", e);
+    private static void initializePeers(String[] args) {
+        if (args != null && args.length > 0) {
+            peersToCheckRootHashWith = Arrays.asList(args);
+            LOGGER.info("Using peers from args: " + peersToCheckRootHashWith);
+        } else {
+            peersToCheckRootHashWith = List.of(
+                    "localhost:8080"
+            );
+            LOGGER.info("Using default peers: " + peersToCheckRootHashWith);
         }
     }
 
@@ -56,18 +53,21 @@ public final class Main {
     }
 
     /**
-     * Initializes peer list from arguments or defaults.
-     * @param args command-line arguments; if present, each arg is a peer hostname
+     * Application entry point.
+     *
+     * @param args optional list of peer hosts to query for root hash
      */
-    private static void initializePeers(String[] args) {
-        if (args != null && args.length > 0) {
-            peersToCheckRootHashWith = Arrays.asList(args);
-            LOGGER.info("Using peers from args: " + peersToCheckRootHashWith);
-        } else {
-            peersToCheckRootHashWith = List.of(
-                    "localhost:8080"
-            );
-            LOGGER.info("Using default peers: " + peersToCheckRootHashWith);
+    public static void main(String[] args) {
+        try {
+            port(PORT);
+            GET.run();
+            initInitialBalances();
+            initializePeers(args);
+            long lastBlock = DatabaseService.getLastCheckedBlock();
+            long fromBlock = (lastBlock > 0) ? lastBlock : START_BLOCK;
+            Handler.subscribeAndSync(fromBlock);
+        } catch (IOException | RocksDBException e) {
+            LOGGER.log(Level.SEVERE, "Initialization failed", e);
         }
     }
 }
